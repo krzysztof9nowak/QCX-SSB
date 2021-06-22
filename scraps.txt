@@ -1,0 +1,58 @@
+/*
+// UCX installation: On blank chip, use (standard Arduino Uno) fuse settings (E:FD, H:DE, L:FF), and use customized Optiboot bootloader for 20MHz clock, then upload via serial interface (with RX, TX and DTR lines connected to pin 1, 2, 3 respectively)
+// UCX pin defintions
++#define SDA     3         //PD3    (pin 5)
++#define SCL     4         //PD4    (pin 6)
++#define ROT_A   6         //PD6    (pin 12)
++#define ROT_B   7         //PD7    (pin 13)
++#define RX      8         //PB0    (pin 14)
++#define SIDETONE 9        //PB1    (pin 15)
++#define KEY_OUT 10        //PB2    (pin 16)
++#define NTX     11        //PB3    (pin 17)
++#define DAH     12        //PB4    (pin 18)
++#define DIT     13        //PB5    (pin 19)
++#define AUDIO1  14        //PC0/A0 (pin 23)
++#define AUDIO2  15        //PC1/A1 (pin 24)
++#define DVM     16        //PC2/A2 (pin 25)
++#define BUTTONS 17        //PC3/A3 (pin 26)
+// In addition set:
+#define OLED  1
+#define ONEBUTTON  1
+#define ONEBUTTON_INV 1
+#undef DEBUG
+adjust I2C and I2C_ ports, 
+ssb_cap=1; dsp_cap=2;
+#define _DELAY() for(uint8_t i = 0; i != 5; i++) asm("nop");
+#define F_XTAL 20004000
+#define F_CPU F_XTAL
+*/
+
+//FUSES = { .low = 0xFF, .high = 0xD6, .extended = 0xFD };   // Fuse settings should be set at programming (Arduino IDE > Tools > Burn bootloader)
+
+
+// Non-recursive CIC Filter (M=2, R=4) implementation, so two-stages of (followed by down-sampling with factor 2):
+// H1(z) = (1 + z^-1)^2 = 1 + 2*z^-1 + z^-2 = (1 + z^-2) + (2) * z^-1 = FA(z) + FB(z) * z^-1;
+// with down-sampling before stage translates into poly-phase components: FA(z) = 1 + z^-1, FB(z) = 2
+// Non-recursive CIC Filter (M=4) implementation (for second-stage only):
+// H1(z) = (1 + z^-1)^4 = 1 + 4*z^-1 + 6*z^-2 + 4*z^-3 + z^-4 = 1 + 6*z^-2 + z^-4 + (4 + 4*z^-2) * z^-1 = FA(z) + FB(z) * z^-1;
+// with down-sampling before stage translates into poly-phase components: FA(z) = 1 + 6*z^-1 + z^-2, FB(z) = 4 + 4*z^-1
+// M=3 FA(z) = 1 + 3*z^-1, FB(z) = 3 + z^-1
+// source: Lyons Understanding Digital Signal Processing 3rd edition 13.24.1
+
+/* Basicdsp simulation:
+# M=2 FA(z) = 1 + z^-1, FB(z) = 2
+# M=3 FA(z) = 1 + 3*z^-1, FB(z) = 3 + z^-1
+# M=4 FA(z) = 1 + 6*z^-1 + z^-2, FB(z) = 4 + 4*z^-1
+samplerate=28000
+x=x+1
+clk1=mod1(x/2)*2
+y=y+clk1
+clk2=mod1(y/2)*2
+#s1=clk1*fir(in, 1, 2, 1, 0)/16
+#s2=clk2*fir(s1, 1, 0, 2, 0, 1, 0, 0)/16
+#s1=clk1*fir(in, 1, 3, 3, 1, 0)/16
+#s2=clk2*fir(s1, 1, 0, 3, 0, 3, 0, 1, 0, 0)/16
+s1=clk1*fir(in, 1, 4, 6, 4, 1, 0)/16
+s2=clk2*fir(s1, 1, 0, 4, 0, 6, 0, 4, 0, 1, 0, 0)/16
+out=s2
+ */
